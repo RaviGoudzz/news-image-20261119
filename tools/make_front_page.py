@@ -1,13 +1,8 @@
-import json
-import math
-import os
-import re
 from PIL import Image, ImageDraw, ImageFont
 
-HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 W, H = 1024, 1024
 PAPER = "#F7F2E7"
-INK = "#191919"
+INK = "#1A1A1A"
 MUTED = "#6B6255"
 RULE = "#D8D0C0"
 RED = "#B3261E"
@@ -24,22 +19,6 @@ GEORGIA = "/System/Library/Fonts/Supplemental/Georgia.ttf"
 
 img = Image.new("RGB", (W, H), PAPER)
 d = ImageDraw.Draw(img)
-
-with open(os.path.join(HERE, "news-edition.json"), encoding="utf-8") as fh:
-    edition = json.load(fh)
-stories = sorted(edition["stories"], key=lambda s: int(s["n"]))
-
-OUTLETS = {"Reuters", "AP", "AFP", "BBC", "Al Jazeera", "UN News", "Euronews", "ABC", "RNZ", "Xinhua", "Nature", "Kompas", "SABC", "NASA", "Day", "UFC", "Prensa", "L'Observateur", "Hand", "Greek", "City", "Media", "Monitoring", "Agency", "Press", "TV", "Radio", "News", "Post", "Times", "Star", "Mail", "Guardian", "Telegraph", "Journal", "Tribune", "Herald", "Bulletin", "Gazette", "Standard", "Daily"}
-
-
-def strip_sources(text):
-    if " — " not in text:
-        return text
-    head, tail = text.rsplit(" — ", 1)
-    parts = [p.strip() for p in tail.split("·")]
-    if parts and all(p and p[0].isupper() for p in parts):
-        return head.strip()
-    return text
 
 
 def f(path, size):
@@ -62,43 +41,31 @@ def wrap(text, font, maxw):
     return lines
 
 
-def fit(text, font, maxw, maxlines):
-    lines = wrap(text, font, maxw)
-    if len(lines) <= maxlines:
-        return lines
-    out = lines[:maxlines]
-    last = out[-1]
-    while d.textlength(last + "…", font=font) > maxw and last:
-        last = last[:-1]
-    out[-1] = last + "…"
-    return out
-
-
-def block(x, y, text, font, fill, maxw, lh, maxlines=None):
-    lines = fit(text, font, maxw, maxlines) if maxlines else wrap(text, font, maxw)
-    for line in lines:
+def block(x, y, text, font, fill, maxw, lh):
+    for line in wrap(text, font, maxw):
         d.text((x, y), line, font=font, fill=fill)
         y += lh
     return y
 
 
-def chip(x, y, label, color, size=11):
-    font = f(FONT_BOLD, size)
-    w = int(d.textlength(label, font=font)) + 12
-    d.rounded_rectangle([x, y, x + w, y + 18], radius=4, fill=color)
-    d.text((x + 6, y + 3), label, font=font, fill="#FFFFFF")
+def chip(x, y, label, color):
+    font = f(FONT_BOLD, 12)
+    w = int(d.textlength(label, font=font)) + 14
+    d.rounded_rectangle([x, y, x + w, y + 20], radius=4, fill=color)
+    d.text((x + 7, y + 3), label, font=font, fill="#FFFFFF")
     return w
 
 
 def card(x, y, w, h):
-    d.rounded_rectangle([x, y, x + w, y + h], radius=5, fill=CARD, outline=RULE, width=1)
+    d.rounded_rectangle([x, y, x + w, y + h], radius=6, fill=CARD, outline=RULE, width=2)
 
 
-def hrule(y, color=RED, width=3):
+def rule(y, color=RED, width=3):
     d.line([(24, y), (1000, y)], fill=color, width=width)
 
 
 def star(cx, cy, r, fill):
+    import math
     pts = []
     for i in range(10):
         ang = -math.pi / 2 + i * math.pi / 5
@@ -107,199 +74,172 @@ def star(cx, cy, r, fill):
     d.polygon(pts, fill=fill)
 
 
-# ---------- icons ----------
-def ic_politics(cx, cy):
-    for i, (x, col) in enumerate([(cx - 26, "#B22234"), (cx, "#DE2910"), (cx + 26, "#0039A6")]):
-        d.line([(x, cy - 22), (x, cy + 22)], fill="#8A7A5A", width=2)
-        d.rectangle([x, cy - 22, x + 18, cy - 8], fill=col)
+# ---------------- masthead ----------------
+d.text((24, 16), "THE WORLD IN ONE DAY", font=f(FONT_BLACK, 24), fill=INK)
+date_txt = "Thursday 19 November 2026"
+dw = d.textlength(date_txt, font=f(GEORGIA_B, 20))
+d.text((1000 - dw, 20), date_txt, font=f(GEORGIA_B, 20), fill=RED)
+rule(54)
 
-
-def ic_justice(cx, cy):
-    g = "#C9A227"
-    d.line([(cx, cy - 22), (cx, cy + 20)], fill=g, width=3)
-    d.line([(cx - 20, cy - 14), (cx + 20, cy - 14)], fill=g, width=3)
-    d.polygon([(cx - 19, cy + 8), (cx - 5, cy + 8), (cx - 12, cy - 6)], outline=g, width=2)
-    d.polygon([(cx + 5, cy + 8), (cx + 19, cy + 8), (cx + 12, cy - 6)], outline=g, width=2)
-    d.rectangle([cx - 10, cy + 20, cx + 10, cy + 24], fill=g)
-
-
-def ic_business(cx, cy):
-    d.line([(cx - 22, cy + 18), (cx + 22, cy + 18)], fill="#2E6B3E", width=3)
-    d.polygon([(cx - 20, cy + 14), (cx - 8, cy + 2), (cx + 2, cy + 8), (cx + 14, cy - 16)], fill="#2E6B3E")
-    d.line([(cx + 14, cy - 16), (cx + 22, cy - 12)], fill="#2E6B3E", width=3)
-    d.ellipse([cx + 12, cy + 2, cx + 30, cy + 20], fill="#C9A227")
-
-
-def ic_war(cx, cy):
-    star(cx, cy - 2, 16, "#E67E22")
-    star(cx, cy - 4, 9, "#F1C40F")
-    d.line([(cx - 24, cy + 18), (cx + 24, cy + 18)], fill="#3A3A3A", width=3)
-
-
-def ic_disaster(cx, cy):
-    d.arc([cx - 24, cy - 18, cx + 8, cy + 18], 200, 340, fill="#1F4E79", width=4)
-    d.arc([cx - 8, cy - 8, cx + 24, cy + 24], 20, 160, fill="#1F4E79", width=4)
-    d.line([(cx - 22, cy + 22), (cx + 22, cy + 22)], fill="#1F4E79", width=3)
-
-
-def ic_sport(cx, cy):
-    d.ellipse([cx - 12, cy - 12, cx + 12, cy + 12], fill="#C9A227")
-    d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill="#E8C55A")
-    d.polygon([(cx - 10, cy - 20), (cx - 4, cy - 8), (cx + 2, cy - 20)], fill="#B3261E")
-    d.polygon([(cx + 10, cy - 20), (cx + 4, cy - 8), (cx - 2, cy - 20)], fill="#1F4E79")
-
-
-def ic_science(cx, cy):
-    for a in (0, 60, 120):
-        d.ellipse([cx - 20, cy - 20, cx + 20, cy + 20], outline="#6A3FA0", width=2)
-        break
-    d.ellipse([cx - 20, cy - 7, cx + 20, cy + 7], outline="#6A3FA0", width=2)
-    d.ellipse([cx - 7, cy - 20, cx + 7, cy + 20], outline="#6A3FA0", width=2)
-    d.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill="#6A3FA0")
-
-
-def ic_health(cx, cy):
-    d.rectangle([cx - 16, cy - 6, cx + 16, cy + 6], fill="#B3261E")
-    d.rectangle([cx - 6, cy - 16, cx + 6, cy + 16], fill="#B3261E")
-
-
-def ic_env(cx, cy):
-    d.polygon([(cx, cy - 20), (cx + 14, cy - 4), (cx + 6, cy + 18), (cx - 10, cy + 14), (cx - 14, cy - 6)], fill="#2E6B3E")
-    d.line([(cx - 8, cy + 12), (cx + 4, cy - 8)], fill="#F7F2E7", width=2)
-
-
-def ic_culture(cx, cy):
-    d.polygon([(cx - 18, cy - 14), (cx, cy - 6), (cx, cy + 16), (cx - 18, cy + 8)], fill="#6A3FA0")
-    d.polygon([(cx + 18, cy - 14), (cx, cy - 6), (cx, cy + 16), (cx + 18, cy + 8)], fill="#8A5FC0")
-
-
-def ic_globe(cx, cy):
-    d.ellipse([cx - 18, cy - 18, cx + 18, cy + 18], outline="#1F4E79", width=3)
-    d.ellipse([cx - 8, cy - 18, cx + 8, cy + 18], outline="#1F4E79", width=2)
-    d.line([(cx - 18, cy), (cx + 18, cy)], fill="#1F4E79", width=2)
-
-
-ICONS = [
-    (("court", "icj", "tribunal", "guilty", "sentenc", "justice", "judge"), ic_justice),
-    (("missile", "strike", "killed", "war", "military", "police", "gang", "fire", "attack", "drone"), ic_war),
-    (("cyclone", "flood", "storm", "hurricane", "earthquake", "landfall", "wildfire"), ic_disaster),
-    (("gta", "sale", "ipo", "market", "econom", "budget", "imf", "rate", "shares", "oil", "trade", "aid", "loan", "fund"), ic_business),
-    (("olympic", "marathon", "sport", "football", "cup", "medal", "doping"), ic_sport),
-    (("vaccine", "virus", "health", "hospital", "measles", "bird flu"), ic_health),
-    (("fossil", "climate", "cop31", "emissions", "wildfire"), ic_env),
-    (("study", "space", "species", "science", "research", "astronomer", "gene", "vaccine"), ic_science),
-    (("author", "film", "music", "book", "novel", "director"), ic_culture),
-    (("summit", "president", "minister", "parliament", "election", "court", "eu", "un", "nato", "mayor", "ambassador", "sanction"), ic_politics),
-]
-
-
-def icon_for(story):
-    text = (story["headline"] + " " + story["summary"]).lower()
-    for keys, fn in ICONS:
-        if any(k in text for k in keys):
-            return fn
-    return ic_globe
-
-
-# ---------- masthead ----------
-d.text((24, 12), "THE WORLD IN ONE DAY", font=f(FONT_BLACK, 22), fill=INK)
-dt = "Thursday 19 November 2026"
-dw = d.textlength(dt, font=f(GEORGIA_B, 18))
-d.text((1000 - dw, 16), dt, font=f(GEORGIA_B, 18), fill=RED)
-hrule(46)
 headline = "Thursday 19 November 2026"
-hw = d.textlength(headline, font=f(GEORGIA_B, 52))
-d.text(((W - hw) / 2, 56), headline, font=f(GEORGIA_B, 52), fill=INK)
-sub = f"{len(stories)} stories · {len(edition['regions'])} regions · every event from this one day"
-sw = d.textlength(sub, font=f(GEORGIA, 17))
-d.text(((W - sw) / 2, 122), sub, font=f(GEORGIA, 17), fill=MUTED)
+hw = d.textlength(headline, font=f(GEORGIA_B, 58))
+d.text(((W - hw) / 2, 68), headline, font=f(GEORGIA_B, 58), fill=INK)
+sub = "The day's world news in one image"
+sw = d.textlength(sub, font=f(GEORGIA, 20))
+d.text(((W - sw) / 2, 138), sub, font=f(GEORGIA, 20), fill=MUTED)
+rule(164, RULE, 2)
 
-# region chips
-labels = []
-for r in edition["regions"]:
-    name = r.get("id") or r.get("name") or ""
-    labels.append(f"{name.upper()} {r['count']}")
-font = f(FONT_BOLD, 11)
-widths = [int(d.textlength(t, font=font)) + 14 for t in labels]
-gap = 8
-total = sum(widths) + gap * (len(labels) - 1)
-x = (W - total) / 2
-for t, w in zip(labels, widths):
-    d.rounded_rectangle([x, 148, x + w, 166], radius=4, fill=BLUE)
-    d.text((x + 7, 151), t, font=font, fill="#FFFFFF")
-    x += w + gap
-hrule(178, RULE, 2)
-
-# ---------- lead story ----------
-lead = stories[0]
-card(24, 186, 976, 140)
-d.rectangle([24, 186, 286, 326], fill="#EAF1F8")
-d.line([(286, 186), (286, 326)], fill=RULE, width=1)
+# ---------------- lead story ----------------
+card(24, 175, 976, 190)
+d.rectangle([24, 175, 300, 365], fill="#EAF1F8")
+d.line([(300, 175), (300, 365)], fill=RULE, width=2)
 # flags
 def flag(x, y, kind):
-    w, h = 66, 40
+    w, h = 74, 46
     if kind == "US":
         for i in range(7):
             d.rectangle([x, y + i * h / 7, x + w, y + (i + 1) * h / 7], fill="#B22234" if i % 2 == 0 else "#FFFFFF")
         d.rectangle([x, y, x + w * 0.42, y + h * 4 / 7], fill="#3C3B6E")
         for r in range(2):
             for c in range(3):
-                star(x + 5 + c * 9, y + 4 + r * 8, 2.5, "#FFFFFF")
+                star(x + 6 + c * 11, y + 5 + r * 10, 3, "#FFFFFF")
     elif kind == "CN":
         d.rectangle([x, y, x + w, y + h], fill="#DE2910")
-        star(x + 11, y + 11, 7, "#FFDE00")
+        star(x + 12, y + 12, 8, "#FFDE00")
+        for a in (35, 70, 105, 140):
+            import math
+            ang = math.radians(a)
+            star(x + 12 + 16 * math.cos(ang), y + 12 + 16 * math.sin(ang), 3, "#FFDE00")
     else:
         d.rectangle([x, y, x + w, y + h / 3], fill="#FFFFFF")
         d.rectangle([x, y + h / 3, x + w, y + 2 * h / 3], fill="#0039A6")
         d.rectangle([x, y + 2 * h / 3, x + w, y + h], fill="#D52B1E")
-    d.line([(x - 5, y - 5), (x - 5, y + h + 18)], fill="#8A7A5A", width=2)
+    d.line([(x - 6, y - 6), (x - 6, y + h + 22)], fill="#8A7A5A", width=3)
 
-flag(42, 206, "US")
-flag(128, 206, "CN")
-flag(214, 206, "RU")
-d.text((42, 268), "SHENZHEN · APEC CHINA 2026", font=f(FONT_BOLD, 13), fill=BLUE)
+flag(48, 205, "US")
+flag(140, 205, "CN")
+flag(232, 205, "RU")
+d.text((48, 285), "SHENZHEN", font=f(FONT_BOLD, 15), fill=BLUE)
+d.text((48, 308), "APEC CHINA 2026", font=f(FONT_BOLD, 12), fill=MUTED)
 
-tx = 304
-chip(tx, 196, "WORLD · APEC CHINA 2026", BLUE, 12)
-y = block(tx, 220, lead["headline"], f(GEORGIA_B, 28), INK, 672, 34, 2)
-y = block(tx, y + 4, strip_sources(lead["summary"]), f(GEORGIA, 17), "#33302A", 672, 22, 2)
+tx = 320
+chip(tx, 188, "WORLD · APEC CHINA 2026", BLUE)
+y = block(tx, 216, "Trump, Xi and Putin hold first three-way summit", f(GEORGIA_B, 31), INK, 656, 38)
+y = block(tx, y + 4, "The US, Chinese and Russian leaders met for 90 minutes and issued a joint declaration on nuclear war, oil production and UN reform.", f(GEORGIA, 18), "#33302A", 656, 24)
+d.text((tx, 336), "Sources: AFP · Reuters · Xinhua", font=f(FONT, 12), fill=MUTED)
 
-# ---------- feature cards ----------
-features = stories[1:10]
-fx = [24, 352, 680]
-fy = 336
-fw, fh = 312, 108
-for i, st in enumerate(features):
-    col, row = i % 3, i // 3
-    x, y = fx[col], fy + row * (fh + 8)
-    card(x, y, fw, fh)
-    chip(x + 10, y + 8, st["region"].upper(), RED if st["region"] == "asia" else BLUE, 10)
-    icon_for(st)(x + fw - 34, y + 40)
-    block(x + 10, y + 32, st["headline"], f(GEORGIA_B, 14), INK, fw - 70, 17, 2)
-    block(x + 10, y + 70, strip_sources(st["summary"]), f(GEORGIA, 10.5), "#33302A", fw - 20, 13, 2)
+# ---------------- row B ----------------
+def icon_scales(cx, cy, s=1.0):
+    gold = "#C9A227"
+    d.line([(cx, cy - 40 * s), (cx, cy + 40 * s)], fill=gold, width=int(5 * s))
+    d.line([(cx - 42 * s, cy - 28 * s), (cx + 42 * s, cy - 28 * s)], fill=gold, width=int(5 * s))
+    d.polygon([(cx - 40 * s, cy + 18 * s), (cx - 8 * s, cy + 18 * s), (cx - 24 * s, cy - 8 * s)], outline=gold, width=int(3 * s))
+    d.polygon([(cx + 8 * s, cy + 18 * s), (cx + 40 * s, cy + 18 * s), (cx + 24 * s, cy - 8 * s)], outline=gold, width=int(3 * s))
+    d.rectangle([cx - 18 * s, cy + 40 * s, cx + 18 * s, cy + 46 * s], fill=gold)
 
-# ---------- also list ----------
-list_y = 686
-d.text((24, list_y), "ALSO ON THURSDAY 19 NOVEMBER", font=f(FONT_BLACK, 14), fill=INK)
-hrule(list_y + 22, RULE, 2)
-rest = stories[10:]
+
+def icon_controller(cx, cy, s=1.0):
+    d.rounded_rectangle([cx - 46 * s, cy - 24 * s, cx + 46 * s, cy + 24 * s], radius=18 * s, fill="#2B2B2B")
+    d.rectangle([cx - 30 * s, cy - 6 * s, cx - 12 * s, cy + 6 * s], fill="#E8E8E8")
+    d.rectangle([cx - 24 * s, cy - 12 * s, cx - 18 * s, cy + 12 * s], fill="#E8E8E8")
+    d.ellipse([cx + 14 * s, cy - 12 * s, cx + 26 * s, cy], fill="#C0392B")
+    d.ellipse([cx + 30 * s, cy - 2 * s, cx + 42 * s, cy + 10 * s], fill="#2E6B3E")
+
+
+def story_card(x, y, w, h, region, color, headline, summary, icon=None):
+    card(x, y, w, h)
+    chip(x + 14, y + 12, region, color)
+    yy = y + 42
+    yy = block(x + 14, yy, headline, f(GEORGIA_B, 25), INK, w - 28, 31)
+    yy = block(x + 14, yy + 4, summary, f(GEORGIA, 16), "#33302A", w - 28, 21)
+    if icon:
+        icon(x + w - 56, y + h - 56)
+
+
+story_card(24, 380, 480, 175, "ASIA · JUSTICE", RED,
+           "World Court: Myanmar committed genocide",
+           "The ICJ found Myanmar guilty of genocide against the Rohingya and ordered reparations.",
+           icon_scales)
+story_card(520, 380, 480, 175, "BUSINESS · GAMES", "#2E6B3E",
+           "GTA VI launches at $2.3B",
+           "Rockstar's sequel became the biggest video-game launch in history, beating Call of Duty by $600M.",
+           icon_controller)
+
+
+def icon_tanker(cx, cy):
+    d.polygon([(cx - 60, cy), (cx + 60, cy), (cx + 44, cy + 18), (cx - 48, cy + 18)], fill="#1F3A5F")
+    d.rectangle([cx - 24, cy - 18, cx - 2, cy], fill="#FFFFFF")
+    d.rectangle([cx + 8, cy - 12, cx + 30, cy], fill="#C0392B")
+    d.ellipse([cx + 44, cy - 26, cx + 62, cy - 8], fill="#3A3A3A")
+    for a in (0, 60, 120, 180, 240, 300):
+        import math
+        ang = math.radians(a)
+        d.line([(cx + 53, cy - 17), (cx + 53 + 10 * math.cos(ang), cy - 17 + 10 * math.sin(ang))], fill="#3A3A3A", width=2)
+    d.polygon([(cx + 34, cy - 34), (cx + 44, cy - 18), (cx + 30, cy - 20)], fill="#E67E22")
+    d.polygon([(cx + 40, cy - 30), (cx + 48, cy - 18), (cx + 36, cy - 21)], fill="#F1C40F")
+
+
+def icon_tower(cx, cy):
+    d.rectangle([cx - 16, cy - 42, cx + 16, cy + 40], fill="#35507A")
+    d.rectangle([cx - 2, cy - 56, cx + 2, cy - 42], fill="#35507A")
+    for r in range(5):
+        d.line([(cx - 12, cy - 30 + r * 14), (cx + 12, cy - 30 + r * 14)], fill="#9FB6D4", width=2)
+    star(cx + 26, cy - 20, 14, "#E67E22")
+    star(cx + 32, cy - 28, 8, "#F1C40F")
+
+
+def icon_factory(cx, cy):
+    d.rectangle([cx - 50, cy - 10, cx + 50, cy + 34], fill="#7A6A55")
+    for i in range(3):
+        x0 = cx - 50 + i * 34
+        d.polygon([(x0, cy - 10), (x0 + 17, cy - 28), (x0 + 34, cy - 10)], fill="#8A7A63")
+    d.rectangle([cx + 28, cy - 40, cx + 40, cy - 10], fill="#5A4E3E")
+    d.rectangle([cx - 44, cy + 8, cx - 18, cy + 34], fill="#3A3228")
+    d.rectangle([cx + 8, cy + 4, cx + 44, cy + 34], fill="#C9BFA8")
+
+
+story_card(24, 570, 312, 175, "MIDDLE EAST · HORMUZ", "#C77700",
+           "Tanker hits mine, catches fire",
+           "An oil tanker caught fire after hitting a naval mine east of the Strait of Hormuz, Iran's navy said.",
+           icon_tanker)
+story_card(356, 570, 312, 175, "MIDDLE EAST · RIYADH", "#C77700",
+           "Missiles hit Riyadh financial district",
+           "Houthi missiles damaged the PIF Tower and other buildings; no injuries reported.",
+           icon_tower)
+story_card(688, 570, 312, 175, "ASIA · BANGLADESH", RED,
+           "341 garment factories closed",
+           "Minimum-wage protests spread; police used tear gas in Ashulia and Gazipur.",
+           icon_factory)
+
+# ---------------- also on the day ----------------
+d.text((24, 762), "ALSO ON 19 NOVEMBER", font=f(FONT_BLACK, 15), fill=INK)
+rule(784, RULE, 2)
+items = [
+    ("AMERICAS", "El Salvador: Bukele files for a third term"),
+    ("AFRICA", "Senegal: budget enacted by decree; $2.2B IMF talks"),
+    ("ASIA", "Mongolia: president resigns amid corruption claims"),
+    ("AMERICAS", "Haiti: 34 alleged gang members killed in Port-au-Prince"),
+    ("MIDDLE EAST", "Somalia expels the UAE ambassador"),
+    ("GLOBAL", "Saudi oil exports highest since the February war"),
+    ("ASIA", "Pakistan and Qatar sign a security pact"),
+]
 col_x = [24, 520]
-font = f(GEORGIA, 12)
-for i, st in enumerate(rest):
-    x = col_x[i // 12]
-    y = list_y + 32 + (i % 12) * 23
-    txt = f"{i + 11}. {st['headline']}"
-    if st.get("place"):
-        txt += f" — {st['place']}"
-    lines = fit(txt, font, 464, 1)
-    d.text((x, y), lines[0], font=font, fill=INK)
+yy = 798
+for i, (reg, txt) in enumerate(items):
+    x = col_x[i // 4]
+    y = yy + (i % 4) * 28
+    region_colors = {"ASIA": RED, "MIDDLE EAST": "#C77700", "AMERICAS": "#6A3FA0", "AFRICA": "#8A5A00", "GLOBAL": BLUE}
+    chip(x, y, reg, region_colors.get(reg, BLUE))
+    cw = int(d.textlength(reg, font=f(FONT_BOLD, 12))) + 14
+    d.text((x + cw + 8, y + 2), txt, font=f(GEORGIA, 16), fill=INK)
 
-# ---------- date check + footer ----------
-d.rounded_rectangle([24, 984, 1000, 1006], radius=4, outline=RED, width=2)
-d.text((34, 989), "DATE CHECK: Every story on this page is from Thursday 19 November 2026.", font=f(FONT_BOLD, 11), fill=RED)
-foot = "19 NOVEMBER 2026 · THE WORLD IN ONE DAY · drawn in code · sources: AFP, Reuters, BBC, Al Jazeera, UN News, Euronews, ABC, RNZ, Xinhua, Nature"
-fw2 = d.textlength(foot, font=f(FONT, 10))
-d.text(((W - fw2) / 2, 1010), foot, font=f(FONT, 10), fill=MUTED)
+# ---------------- date check + footer ----------------
+d.rounded_rectangle([24, 946, 1000, 976], radius=4, outline=RED, width=2)
+dt = "DATE CHECK: Every story on this page is from Thursday 19 November 2026."
+d.text((36, 953), dt, font=f(FONT_BOLD, 13), fill=RED)
+foot = "19 NOVEMBER 2026 · THE WORLD IN ONE DAY · drawn in code · sources: AFP, Reuters, BBC, Al Jazeera, UN News, Euronews, ABC, RNZ, Xinhua"
+fw = d.textlength(foot, font=f(FONT, 11))
+d.text(((W - fw) / 2, 988), foot, font=f(FONT, 11), fill=MUTED)
 
-img.save(os.path.join(HERE, "entry.png"), "PNG", optimize=True)
-print("saved", img.size, len(stories), "stories")
+img.save("/Users/monalisa/makefun/news-image-20261119/entry.png", "PNG", optimize=True)
+print("saved", img.size)
