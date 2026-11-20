@@ -1,5 +1,5 @@
 // news-image-20261119 entry: copies the day's front page to the grader's output.
-import { copyFileSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
